@@ -108,10 +108,13 @@ namespace LanternKeeper
 
         public Item RegisterItem(Type type, Item item)
         {
-            PhysicsProp script = item.spawnPrefab.AddComponent(type) as PhysicsProp;
-            script.grabbable = true;
-            script.grabbableToEnemies = true;
-            script.itemProperties = item;
+            if (item.spawnPrefab.GetComponent<PhysicsProp>() == null)
+            {
+                PhysicsProp script = item.spawnPrefab.AddComponent(type) as PhysicsProp;
+                script.grabbable = true;
+                script.grabbableToEnemies = true;
+                script.itemProperties = item;
+            }
 
             NetworkPrefabs.RegisterNetworkPrefab(item.spawnPrefab);
             Utilities.FixMixerGroups(item.spawnPrefab);

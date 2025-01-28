@@ -369,7 +369,7 @@ namespace LanternKeeper.Behaviours
 
             if (IsServer || IsHost)
             {
-                for (int i = 0; i < StartOfRound.Instance.allPlayerScripts.Where(p => p.isPlayerControlled).Count(); i++)
+                for (int i = 0; i < StartOfRound.Instance.connectedPlayersAmount + 1; i++)
                     LKUtilities.SpawnObject(LanternKeeper.daggerObj, transform.position + Vector3.up * 0.5f, !isOutside);
             }
         }
