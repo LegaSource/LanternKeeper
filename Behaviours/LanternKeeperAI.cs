@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.Linq;
 using Unity.Netcode;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 namespace LanternKeeper.Behaviours
 {
@@ -50,7 +49,6 @@ namespace LanternKeeper.Behaviours
 
             if (isEnemyDead || StartOfRound.Instance.allPlayersDead) return;
 
-            AdjustPosition();
             creatureAnimator.SetBool("stunned", stunNormalizedTimer > 0f);
             if (stunNormalizedTimer > 0f)
             {
@@ -72,26 +70,6 @@ namespace LanternKeeper.Behaviours
             }
         }
 
-        private void AdjustPosition()
-        {
-            if (!(IsHost || IsServer)) return;
-            if (isEnemyDead || StartOfRound.Instance.allPlayersDead) return;
-
-            switch (currentBehaviourStateIndex)
-            {
-                case (int)State.WANDERING:
-                case (int)State.CHASING:
-                    transform.position = new Vector3(transform.position.x, transform.position.y - 0.15f, transform.position.z);
-                    break;
-                case (int)State.ATTACKING:
-                    transform.position = new Vector3(transform.position.x, transform.position.y - 0.05f, transform.position.z);
-                    break;
-
-                default:
-                    break;
-            }
-        }
-
         public void PlayCrawlSound()
         {
             if (currentBehaviourStateIndex == (int)State.ATTACKING || currentBehaviourStateIndex == (int)State.KILLING) return;
@@ -100,7 +78,7 @@ namespace LanternKeeper.Behaviours
             if (CrawlSounds.Length > 0 && crawlTimer <= 0)
             {
                 creatureSFX.PlayOneShot(CrawlSounds[UnityEngine.Random.Range(0, CrawlSounds.Length)]);
-                crawlTimer = 1.4f;
+                crawlTimer = currentBehaviourStateIndex == (int)State.WANDERING ? 1.3f : 1.1f;
             }
         }
 
