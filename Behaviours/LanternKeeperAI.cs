@@ -30,8 +30,7 @@ namespace LanternKeeper.Behaviours
         {
             WANDERING,
             CHASING,
-            ATTACKING,
-            KILLING
+            ATTACKING
         }
 
         public override void Start()
@@ -72,7 +71,7 @@ namespace LanternKeeper.Behaviours
 
         public void PlayCrawlSound()
         {
-            if (currentBehaviourStateIndex == (int)State.ATTACKING || currentBehaviourStateIndex == (int)State.KILLING) return;
+            if (currentBehaviourStateIndex == (int)State.ATTACKING) return;
 
             crawlTimer -= Time.deltaTime;
             if (CrawlSounds.Length > 0 && crawlTimer <= 0)
@@ -92,7 +91,7 @@ namespace LanternKeeper.Behaviours
             {
                 case (int)State.WANDERING:
                     agent.speed = 1.5f * angerMeter;
-                    if (FoundClosestPlayerInRange(25f, 10f))
+                    if (FoundClosestPlayerInRange(25, 10))
                     {
                         StopSearch(currentSearch);
                         DoAnimationClientRpc("startChase");
@@ -139,24 +138,18 @@ namespace LanternKeeper.Behaviours
                     }
                     SetMovingTowardsTargetPlayer(targetPlayer);
                     break;
-                case (int)State.KILLING:
-                    agent.speed = 0f;
-                    break;
 
                 default:
                     break;
             }
         }
 
-        public bool FoundClosestPlayerInRange(float range, float senseRange)
+        bool FoundClosestPlayerInRange(int range, int senseRange)
         {
-            TargetClosestPlayer(bufferDistance: 1.5f, requireLineOfSight: true);
-            if (targetPlayer == null)
-            {
-                TargetClosestPlayer(bufferDistance: 1.5f, requireLineOfSight: false);
-                range = senseRange;
-            }
-            return targetPlayer != null && Vector3.Distance(transform.position, targetPlayer.transform.position) < range;
+            PlayerControllerB player = CheckLineOfSightForPlayer(60f, range, senseRange);
+            if (player == null || !PlayerIsTargetable(player)) return false;
+
+            return targetPlayer = player;
         }
 
         public void GoToLastLanternLit()
@@ -197,9 +190,14 @@ namespace LanternKeeper.Behaviours
 
         public override void OnCollideWithPlayer(Collider other)
         {
+            base.OnCollideWithPlayer(other);
+
+            if (currentBehaviourStateIndex != (int)State.CHASING) return;
+
             PlayerControllerB player = MeetsStandardPlayerCollisionConditions(other);
-            if (player != null && currentBehaviourStateIndex == (int)State.CHASING)
-                getUpCoroutine ??= StartCoroutine(GetUpCoroutine());
+            if (player == null) return;
+            
+            getUpCoroutine ??= StartCoroutine(GetUpCoroutine());
         }
 
         public IEnumerator GetUpCoroutine()
@@ -305,15 +303,20 @@ namespace LanternKeeper.Behaviours
 
             if (Vector3.Distance(transform.position, entranceTeleport.entrancePoint.position) < 1f)
             {
-                Vector3 exitPosition = entrances.Where(e => e.isEntranceToBuilding != entranceTeleport.isEntranceToBuilding && e.entranceId == entranceTeleport.entranceId)
-                    .FirstOrDefault()
+                Vector3 exitPosition = entrances.FirstOrDefault(e => e.isEntranceToBuilding != entranceTeleport.isEntranceToBuilding && e.entranceId == entranceTeleport.entranceId)
                     .entrancePoint
                     .position;
-                TeleportEnemyClientRpc(exitPosition, !isOutside);
+                StartCoroutine(TeleportEnemyCoroutine(exitPosition));
                 return;
             }
 
             SetDestinationToPosition(entranceTeleport.entrancePoint.position);
+        }
+
+        public IEnumerator TeleportEnemyCoroutine(Vector3 position)
+        {
+            yield return new WaitForSeconds(1f);
+            TeleportEnemyClientRpc(position, !isOutside);
         }
 
         [ClientRpc]
