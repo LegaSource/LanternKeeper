@@ -115,7 +115,7 @@ namespace LanternKeeper.Behaviours
                     agent.speed = CollidesWithEnemy(targetPlayer.gameplayCamera.transform.position) ? 0f : 1f * angerMeter;
                     if (damagePlayerCoroutine == null)
                     {
-                        if (targetPlayer == null || Vector3.Distance(transform.position, targetPlayer.transform.position) > 7f)
+                        if (targetPlayer == null || Vector3.Distance(transform.position, targetPlayer.transform.position) > 5f)
                         {
                             StartSearch(transform.position);
                             DoAnimationClientRpc("startGetDown");
@@ -204,7 +204,7 @@ namespace LanternKeeper.Behaviours
             }
             DoAnimationClientRpc("startIdle");
 
-            yield return new WaitForSeconds(2f);
+            yield return new WaitForSeconds(1.5f);
 
             damagePlayerCoroutine = null;
         }
