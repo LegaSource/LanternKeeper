@@ -19,7 +19,7 @@ namespace LanternKeeper
     {
         private const string modGUID = "Lega.LanternKeeper";
         private const string modName = "Lantern Keeper";
-        private const string modVersion = "1.0.2";
+        private const string modVersion = "1.0.3";
 
         private readonly Harmony harmony = new Harmony(modGUID);
         private readonly static AssetBundle bundle = AssetBundle.LoadFromFile(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "lanternkeeper"));
@@ -49,6 +49,7 @@ namespace LanternKeeper
         public static GameObject greenLight;
         public static GameObject whiteLight;
 
+        public static bool teleportOnCooldown = false;
         public enum ControlTip
         {
             RED,
@@ -92,10 +93,8 @@ namespace LanternKeeper
                 foreach (var method in methods)
                 {
                     var attributes = method.GetCustomAttributes(typeof(RuntimeInitializeOnLoadMethodAttribute), false);
-                    if (attributes.Length > 0)
-                    {
-                        method.Invoke(null, null);
-                    }
+                    if (attributes.Length == 0) continue;
+                    method.Invoke(null, null);
                 }
             }
         }

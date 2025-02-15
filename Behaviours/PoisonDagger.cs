@@ -43,7 +43,7 @@ namespace LanternKeeper.Behaviours
         {
             if (previousPlayerHeldBy == null)
             {
-                LanternKeeper.mls.LogError("Previousplayerheldby is null on this client when HitDagger is called.");
+                LanternKeeper.mls.LogError("Previousplayerheldby is null on this client when HitDagger is called");
                 return;
             }
             previousPlayerHeldBy.activatingItem = false;
@@ -53,7 +53,7 @@ namespace LanternKeeper.Behaviours
             if (!cancel && Time.realtimeSinceStartup - timeAtLastDamageDealt > 0.43f)
             {
                 previousPlayerHeldBy.twoHanded = false;
-                objectsHitByDagger = Physics.SphereCastAll(previousPlayerHeldBy.gameplayCamera.transform.position + previousPlayerHeldBy.gameplayCamera.transform.right * 0.1f, 0.3f, previousPlayerHeldBy.gameplayCamera.transform.forward, 0.75f, daggerMask, QueryTriggerInteraction.Collide);
+                objectsHitByDagger = Physics.SphereCastAll(previousPlayerHeldBy.gameplayCamera.transform.position + previousPlayerHeldBy.gameplayCamera.transform.right * 0.1f, 0.5f, previousPlayerHeldBy.gameplayCamera.transform.forward, 0.75f, daggerMask, QueryTriggerInteraction.Collide);
                 objectsHitByDaggerList = objectsHitByDagger.OrderBy((RaycastHit x) => x.distance).ToList();
 
                 foreach (RaycastHit daggerHit in objectsHitByDaggerList)
@@ -118,6 +118,8 @@ namespace LanternKeeper.Behaviours
             if (enemyObject.TryGet(out NetworkObject networkObject))
             {
                 EnemyAI enemy = networkObject.gameObject.GetComponentInChildren<EnemyAI>();
+                if (enemy.isEnemyDead) return;
+
                 StopPoisonParticleEnemy();
                 poisonEnemyCoroutine = StartCoroutine(PoisonEnemyCoroutine(enemy));
             }
@@ -144,12 +146,8 @@ namespace LanternKeeper.Behaviours
 
         public void StopPoisonParticleEnemy()
         {
-            if (poisonEnemyCoroutine != null)
-                StopCoroutine(poisonEnemyCoroutine);
-
-            if (poisonParticle != null)
-                Destroy(poisonParticle.gameObject);
-
+            if (poisonEnemyCoroutine != null) StopCoroutine(poisonEnemyCoroutine);
+            if (poisonParticle != null) Destroy(poisonParticle.gameObject);
             poisonEnemyCoroutine = null;
         }
 
@@ -163,8 +161,7 @@ namespace LanternKeeper.Behaviours
             if (IsOwner) return;
 
             RoundManager.PlayRandomClip(daggerAudio, hitSFX);
-            if (hitSurfaceID != -1)
-                HitSurfaceWithDagger(hitSurfaceID);
+            if (hitSurfaceID != -1) HitSurfaceWithDagger(hitSurfaceID);
         }
 
         public void HitSurfaceWithDagger(int hitSurfaceID)

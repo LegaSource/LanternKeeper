@@ -1,4 +1,6 @@
-﻿using LanternKeeper.Managers;
+﻿using GameNetcodeStuff;
+using LanternKeeper.Managers;
+using System.Collections;
 using System.Linq;
 using Unity.Netcode;
 using UnityEngine;
@@ -45,33 +47,44 @@ namespace LanternKeeper.Behaviours
         {
             if (isLightOn)
             {
+                if (LanternKeeper.teleportOnCooldown)
+                {
+                    HUDManager.Instance.DisplayTip(Constants.INFORMATION, Constants.MESSAGE_INFO_TELEPORT_COOLDOWN);
+                    return;
+                }
+
+                Lantern[] eligibleLanterns = LanternKeeper.spawnedLanterns.Where(l => l.isOutside != isOutside).ToArray();
+                if (eligibleLanterns.Length > 0)
+                {
+                    Lantern lantern = eligibleLanterns[new System.Random().Next(eligibleLanterns.Length)];
+                    Vector3 position = RoundManager.Instance.GetRandomNavMeshPositionInRadiusSpherical(lantern.transform.position);
+
+                    PlayerControllerB player = GameNetworkManager.Instance.localPlayerController;
+                    player.isInsideFactory = !player.isInsideFactory;
+                    player.averageVelocity = 0f;
+                    player.velocityLastFrame = Vector3.zero;
+                    player.TeleportPlayer(position);
+                    StartCoroutine(TeleportCooldownCoroutine());
+                    return;
+                }
                 HUDManager.Instance.DisplayTip(Constants.INFORMATION, Constants.MESSAGE_INFO_LANTERN_ALREADY_ON);
                 return;
             }
 
             if (this != LanternKeeper.spawnedLanterns[LanternKeeper.currentLanternToLightIndex])
             {
-                SwitchOffAllLanternsServerRpc();
+                TeleportLanternKeeperServerRpc();
                 return;
             }
 
             LanternInteractionServerRpc();
         }
 
-        [ServerRpc(RequireOwnership = false)]
-        public void SwitchOffAllLanternsServerRpc()
+        public IEnumerator TeleportCooldownCoroutine()
         {
-            LanternKeeper.currentLanternToLightIndex = 0;
-            SwitchOffAllLanternsClientRpc();
-        }
-
-        [ClientRpc]
-        public void SwitchOffAllLanternsClientRpc()
-        {
-            foreach (Lantern lantern in LanternKeeper.spawnedLanterns.Where(l => l.isLightOn))
-                lantern.SwitchOffLantern();
-            lanternKeeper.angerMeter = 1f;
-            HUDManager.Instance.DisplayTip(Constants.INFORMATION, Constants.MESSAGE_INFO_ALL_LANTERN_OFF);
+            LanternKeeper.teleportOnCooldown = true;
+            yield return new WaitForSeconds(ConfigManager.teleportationCooldown.Value);
+            LanternKeeper.teleportOnCooldown = false;
         }
 
         public void SwitchOffLantern()
@@ -106,6 +119,9 @@ namespace LanternKeeper.Behaviours
             {
                 HUDManager.Instance.DisplayTip(Constants.INFORMATION, Constants.MESSAGE_INFO_ALL_LANTERN_ON);
                 SetLanternKeeperVulnerable();
+
+                if (!GameNetworkManager.Instance.localPlayerController.IsServer && !GameNetworkManager.Instance.localPlayerController.IsHost) return;
+                TeleportLanternKeeperServerRpc();
             }
             else
             {
@@ -146,6 +162,13 @@ namespace LanternKeeper.Behaviours
                     light.range *= 2f;
                 }
             }
+        }
+
+        [ServerRpc(RequireOwnership = false)]
+        public void TeleportLanternKeeperServerRpc()
+        {
+            Vector3 position = RoundManager.Instance.GetRandomNavMeshPositionInRadiusSpherical(transform.position);
+            lanternKeeper.StartCoroutine(lanternKeeper.TeleportEnemyCoroutine(position, isOutside));
         }
 
         public void SetLanternKeeperVulnerable()

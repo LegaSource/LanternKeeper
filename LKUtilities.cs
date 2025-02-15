@@ -27,7 +27,7 @@ namespace LanternKeeper
             };
         }
 
-        public static GrabbableObject SpawnObject(GameObject spawnPrefab, Vector3 position, bool isInFactory = true)
+        public static GrabbableObject SpawnItem(GameObject spawnPrefab, Vector3 position, bool isInFactory)
         {
             GameObject gameObject = Object.Instantiate(spawnPrefab, position, Quaternion.identity, StartOfRound.Instance.propsContainer);
             GrabbableObject grabbableObject = gameObject.GetComponent<GrabbableObject>();

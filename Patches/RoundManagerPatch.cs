@@ -71,8 +71,7 @@ namespace LanternKeeper.Patches
                 foreach (GameObject node in nodes)
                 {
                     Vector3 candidatePosition = roundManager.GetRandomNavMeshPositionInBoxPredictable(node.transform.position, radius, default, random) + Vector3.up;
-                    if (!Physics.Raycast(candidatePosition, Vector3.down, out RaycastHit hit, 5f, StartOfRound.Instance.collidersAndRoomMaskAndDefault))
-                        continue;
+                    if (!Physics.Raycast(candidatePosition, Vector3.down, out RaycastHit hit, 5f, StartOfRound.Instance.collidersAndRoomMaskAndDefault)) continue;
 
                     Vector3 validPosition = hit.point;
 
@@ -98,25 +97,12 @@ namespace LanternKeeper.Patches
                     GameObject gameObject = Object.Instantiate(LanternKeeper.lanternObj, bestPosition + Vector3.down * 0.5f, Quaternion.identity, roundManager.mapPropsContainer.transform);
                     Lantern lantern = gameObject.GetComponent<Lantern>();
 
-                    if (isOutside)
-                        lantern.transform.localScale *= 2f;
+                    if (isOutside) lantern.transform.localScale *= 2f;
 
                     gameObject.GetComponent<NetworkObject>().Spawn(true);
                     lantern.InitializeLanternClientRpc(enemyObject, LanternKeeper.shuffledLights[i], isOutside);
                 }
             }
-        }
-
-        [HarmonyPatch(typeof(RoundManager), nameof(RoundManager.CollectNewScrapForThisRound))]
-        [HarmonyPostfix]
-        private static void SpawnFortuneCookie(ref GrabbableObject scrapObject)
-        {
-            if (!isLanternKeeperSpawned) return; // Si client on ne fait pas non plus le patch
-            if (!scrapObject.itemProperties.isScrap || scrapObject.scrapValue <= 0) return;
-
-            Vector3? spawnPosition = GameObject.Find("CatwalkShip")?.transform.position;
-            if (spawnPosition.HasValue)
-                LKUtilities.SpawnObject(LanternKeeper.fortuneCookieObj, spawnPosition.Value + Vector3.up * 0.5f, false);
         }
 
         [HarmonyPatch(typeof(RoundManager), nameof(RoundManager.DetectElevatorIsRunning))]
