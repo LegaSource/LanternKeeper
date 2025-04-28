@@ -1,69 +1,82 @@
 ﻿using LanternKeeper.Behaviours;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine.Rendering.HighDefinition;
 using UnityEngine;
+using UnityEngine.Rendering.HighDefinition;
 
-namespace LanternKeeper.Managers
+namespace LanternKeeper.Managers;
+
+public class CustomPassManager : MonoBehaviour
 {
-    public class CustomPassManager : MonoBehaviour
+    public static AuraCustomPass auraPass;
+    public static CustomPassVolume customPassVolume;
+
+    public static CustomPassVolume CustomPassVolume
     {
-        public static WallhackCustomPass wallhackPass;
-        public static CustomPassVolume customPassVolume;
-
-        public static CustomPassVolume CustomPassVolume
+        get
         {
-            get
+            if (customPassVolume == null)
             {
-                if (customPassVolume == null)
+                customPassVolume = GameNetworkManager.Instance.localPlayerController.gameplayCamera.gameObject.AddComponent<CustomPassVolume>();
+                if (customPassVolume != null)
                 {
-                    customPassVolume = GameNetworkManager.Instance.localPlayerController.gameplayCamera.gameObject.AddComponent<CustomPassVolume>();
-                    if (customPassVolume != null)
-                    {
-                        customPassVolume.targetCamera = GameNetworkManager.Instance.localPlayerController.gameplayCamera;
-                        customPassVolume.injectionPoint = (CustomPassInjectionPoint)1;
-                        customPassVolume.isGlobal = true;
+                    customPassVolume.targetCamera = GameNetworkManager.Instance.localPlayerController.gameplayCamera;
+                    customPassVolume.injectionPoint = (CustomPassInjectionPoint)1;
+                    customPassVolume.isGlobal = true;
 
-                        wallhackPass = new WallhackCustomPass();
-                        customPassVolume.customPasses.Add(wallhackPass);
-                    }
+                    auraPass = new AuraCustomPass();
+                    customPassVolume.customPasses.Add(auraPass);
                 }
-                return customPassVolume;
             }
+            return customPassVolume;
+        }
+    }
+
+    public static void SetupAuraForObjects(GameObject[] objects, Material material)
+    {
+        Renderer[] renderers = GetFilteredRenderersFromObjects(objects);
+        if (renderers.Length > 0) SetupCustomPass(renderers, material);
+    }
+
+    public static void SetupCustomPass(Renderer[] renderers, Material material)
+    {
+        if (CustomPassVolume == null)
+        {
+            LanternKeeper.mls.LogError("CustomPassVolume is not assigned.");
+            return;
         }
 
-        public static void SetupCustomPassForGameObjects(GameObject obj)
+        auraPass = CustomPassVolume.customPasses.Find(pass => pass is AuraCustomPass) as AuraCustomPass;
+        if (auraPass == null)
         {
-            List<Renderer> objRenderers = obj.GetComponentsInChildren<Renderer>().ToList();
+            LanternKeeper.mls.LogError("AuraCustomPass could not be found in CustomPassVolume.");
+            return;
+        }
 
-            if (objRenderers == null || objRenderers.Count == 0)
+        auraPass.AddTargetRenderers(renderers, material);
+    }
+
+    private static Renderer[] GetFilteredRenderersFromObjects(GameObject[] objects)
+    {
+        List<Renderer> collectedRenderers = [];
+
+        foreach (GameObject obj in objects)
+        {
+            if (obj == null) continue;
+
+            List<Renderer> renderers = obj.GetComponentsInChildren<Renderer>().ToList();
+            if (renderers.Count == 0)
             {
                 LanternKeeper.mls.LogError($"No renderer could be found on {obj.name}.");
-                return;
+                continue;
             }
 
-            SetupCustomPass(objRenderers.ToArray());
+            collectedRenderers.AddRange(renderers);
         }
 
-        public static void SetupCustomPass(Renderer[] renderers)
-        {
-            if (CustomPassVolume == null)
-            {
-                LanternKeeper.mls.LogError("CustomPassVolume is not assigned.");
-                return;
-            }
-
-            wallhackPass = CustomPassVolume.customPasses.Find(pass => pass is WallhackCustomPass) as WallhackCustomPass;
-            if (wallhackPass == null)
-            {
-                LanternKeeper.mls.LogError("WallhackCustomPass could not be found in CustomPassVolume.");
-                return;
-            }
-
-            wallhackPass.SetTargetRenderers(renderers, LanternKeeper.wallhackShader);
-        }
-
-        public static void RemoveAura()
-            => wallhackPass?.ClearTargetRenderers();
+        return collectedRenderers.ToArray();
     }
+
+    public static void ClearAura()
+        => auraPass?.ClearTargetRenderers();
 }
