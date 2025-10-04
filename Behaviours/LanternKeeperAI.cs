@@ -1,6 +1,8 @@
 ﻿using GameNetcodeStuff;
 using LanternKeeper.Managers;
-using System;
+using LegaFusionCore.Managers;
+using LegaFusionCore.Registries;
+using LegaFusionCore.Utilities;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,20 +13,13 @@ namespace LanternKeeper.Behaviours;
 
 public class LanternKeeperAI : EnemyAI
 {
-    public float angerMeter = 1f;
-    public Lantern lastLanternLit;
-
     public Transform TurnCompass;
-    public AudioClip[] CrawlSounds = Array.Empty<AudioClip>();
+    public AudioClip[] CrawlSounds = [];
     public AudioClip BiteSound;
     public float crawlTimer = 0f;
 
-    public List<EntranceTeleport> entrances;
-
     public Coroutine getUpCoroutine;
     public Coroutine damagePlayerCoroutine;
-    public Coroutine poisonPlayerCoroutine;
-    public ParticleSystem poisonParticle;
 
     public enum State
     {
@@ -37,9 +32,69 @@ public class LanternKeeperAI : EnemyAI
     {
         base.Start();
 
+        if (LFCUtilities.IsServer) SpawnLanterns();
         currentBehaviourStateIndex = (int)State.WANDERING;
         creatureAnimator.SetTrigger("startMove");
         StartSearch(transform.position);
+    }
+
+    public void SpawnLanterns()
+    {
+        const float minDistance = 50f;
+        List<Vector3> selectedPositions = [];
+        StartOfRound.Instance.allPlayerScripts.Where(p => !p.isPlayerDead).ToList().ForEach(p => selectedPositions.Add(p.transform.position));
+
+        LFCUtilities.Shuffle(RoundManager.Instance.outsideAINodes);
+        LFCUtilities.Shuffle(RoundManager.Instance.insideAINodes);
+
+        for (int i = 0; i < 2; i++)
+        {
+            float maxDistance = float.MinValue;
+            Vector3 bestPosition = Vector3.zero;
+            GameObject lastNodeSaved = null;
+
+            // Déterminer si cette lanterne est à l'extérieur ou à l'intérieur
+            bool isOutside = new System.Random().Next(0, 2) == 1;
+            List<GameObject> nodes = (isOutside ? RoundManager.Instance.outsideAINodes : RoundManager.Instance.insideAINodes).ToList();
+            float radius = isOutside ? 10f : 2f;
+
+            foreach (GameObject node in nodes)
+            {
+                Vector3 candidatePosition = RoundManager.Instance.GetRandomNavMeshPositionInBoxPredictable(node.transform.position, radius, default, new System.Random()) + Vector3.up;
+                if (!Physics.Raycast(candidatePosition, Vector3.down, out UnityEngine.RaycastHit hit, 5f, StartOfRound.Instance.collidersAndRoomMaskAndDefault)) continue;
+
+                Vector3 validPosition = hit.point;
+
+                // Calculer la distance minimale avec les positions sélectionnées
+                float minDistanceToSelected = selectedPositions.Count > 0
+                    ? selectedPositions.Min(p => Vector3.Distance(p, validPosition))
+                    : float.MaxValue;
+
+                // Garder la position la plus éloignée des autres sélectionnées
+                if (minDistanceToSelected > minDistance || minDistanceToSelected > maxDistance)
+                {
+                    maxDistance = minDistanceToSelected;
+                    bestPosition = validPosition;
+                    lastNodeSaved = node;
+
+                    if (minDistanceToSelected > minDistance) break;
+                }
+            }
+
+            if (bestPosition != Vector3.zero)
+            {
+                selectedPositions.Add(bestPosition);
+                _ = nodes.Remove(lastNodeSaved);
+
+                GameObject gameObject = Instantiate(LanternKeeper.lanternObj, bestPosition + (Vector3.down * 0.5f), Quaternion.identity, RoundManager.Instance.mapPropsContainer.transform);
+                Lantern lantern = gameObject.GetComponent<Lantern>();
+
+                if (isOutside) lantern.transform.localScale *= 2f;
+
+                gameObject.GetComponent<NetworkObject>().Spawn(true);
+                lantern.InitializeLanternClientRpc(thisNetworkObject, isOutside);
+            }
+        }
     }
 
     public override void Update()
@@ -90,7 +145,7 @@ public class LanternKeeperAI : EnemyAI
         switch (currentBehaviourStateIndex)
         {
             case (int)State.WANDERING:
-                agent.speed = 1.5f * angerMeter;
+                agent.speed = 3f;
                 if (FoundClosestPlayerInRange(25, 10))
                 {
                     StopSearch(currentSearch);
@@ -100,7 +155,7 @@ public class LanternKeeperAI : EnemyAI
                 }
                 break;
             case (int)State.CHASING:
-                agent.speed = 3f * angerMeter;
+                agent.speed = 6f;
                 if (TargetOutsideChasedPlayer()) return;
                 if (!TargetClosestPlayerInAnyCase() || (Vector3.Distance(transform.position, targetPlayer.transform.position) > 20f && !CheckLineOfSightForPosition(targetPlayer.transform.position)))
                 {
@@ -112,7 +167,7 @@ public class LanternKeeperAI : EnemyAI
                 SetMovingTowardsTargetPlayer(targetPlayer);
                 break;
             case (int)State.ATTACKING:
-                agent.speed = CollidesWithEnemy(targetPlayer.gameplayCamera.transform.position) ? 0f : 1f * angerMeter;
+                agent.speed = 0f;
                 if (damagePlayerCoroutine == null)
                 {
                     if (targetPlayer == null || Vector3.Distance(transform.position, targetPlayer.transform.position) > 5f)
@@ -169,12 +224,12 @@ public class LanternKeeperAI : EnemyAI
     {
         base.OnCollideWithPlayer(other);
 
-        if (currentBehaviourStateIndex != (int)State.CHASING) return;
+        if (currentBehaviourStateIndex != (int)State.CHASING || getUpCoroutine != null) return;
 
         PlayerControllerB player = MeetsStandardPlayerCollisionConditions(other);
         if (player == null) return;
 
-        getUpCoroutine ??= StartCoroutine(GetUpCoroutine());
+        getUpCoroutine = StartCoroutine(GetUpCoroutine());
     }
 
     public IEnumerator GetUpCoroutine()
@@ -195,11 +250,7 @@ public class LanternKeeperAI : EnemyAI
 
         yield return new WaitForSeconds(1f);
 
-        if (CheckLineOfSightForPosition(player.gameplayCamera.transform.position, 70f, 20, 1f)
-            || CollidesWithEnemy(player.gameplayCamera.transform.position))
-        {
-            DamagePlayerClientRpc((int)player.playerClientId);
-        }
+        if (CheckLineOfSightForPosition(player.gameplayCamera.transform.position, 70f, 20, 4f)) DamagePlayerClientRpc((int)player.playerClientId);
         DoAnimationClientRpc("startIdle");
 
         yield return new WaitForSeconds(1.5f);
@@ -208,73 +259,29 @@ public class LanternKeeperAI : EnemyAI
     }
 
     [ClientRpc]
-    public void PlayBiteClientRpc()
-        => creatureSFX.PlayOneShot(BiteSound);
-
-    public bool CollidesWithEnemy(Vector3 position)
-    {
-        Collider[] hitColliders = Physics.OverlapSphere(position, 1f, 524288, QueryTriggerInteraction.Collide);
-        foreach (Collider hitCollider in hitColliders)
-        {
-            EnemyAI enemy = hitCollider.GetComponent<EnemyAICollisionDetect>()?.mainScript;
-            if (enemy != null && enemy == this) return true;
-        }
-        return false;
-    }
+    public void PlayBiteClientRpc() => creatureSFX.PlayOneShot(BiteSound);
 
     [ClientRpc]
     public void DamagePlayerClientRpc(int playerId)
     {
         PlayerControllerB player = StartOfRound.Instance.allPlayerObjects[playerId].GetComponent<PlayerControllerB>();
         if (player == GameNetworkManager.Instance.localPlayerController)
-        {
-            player.DamagePlayer((int)(20 * angerMeter), hasDamageSFX: true, callRPC: true, CauseOfDeath.Mauling);
-
-            StopPoisonParticlePlayer();
-            poisonPlayerCoroutine = StartCoroutine(PoisonPlayerCoroutine(player));
-        }
-    }
-
-    public IEnumerator PoisonPlayerCoroutine(PlayerControllerB player)
-    {
-        poisonParticle = LKUtilities.SpawnPoisonParticle(player.transform);
-
-        float timePassed = 0f;
-        while (timePassed < ConfigManager.enemyPoisonDuration.Value)
-        {
-            HUDManager.Instance.drunknessFilter.weight = Mathf.Max(ConfigManager.enemyPoisonIntensity.Value, HUDManager.Instance.drunknessFilter.weight);
-
-            if (Mathf.FloorToInt(timePassed * 10) % 10 == 0)
-                player.DamagePlayer(ConfigManager.enemyPoisonDamage.Value, hasDamageSFX: true, callRPC: true, CauseOfDeath.Suffocation);
-
-            timePassed += Time.deltaTime;
-
-            yield return null;
-        }
-
-        Destroy(poisonParticle.gameObject);
-        poisonPlayerCoroutine = null;
-    }
-
-    public void StopPoisonParticlePlayer()
-    {
-        if (poisonPlayerCoroutine != null) StopCoroutine(poisonPlayerCoroutine);
-        if (poisonParticle != null) Destroy(poisonParticle.gameObject);
-        poisonPlayerCoroutine = null;
+            player.DamagePlayer(ConfigManager.enemyDirectDamage.Value, hasDamageSFX: true, callRPC: true, CauseOfDeath.Mauling);
+        LFCStatusEffectRegistry.ApplyStatus(player.gameObject, LFCStatusEffectRegistry.StatusEffectType.POISON, playerWhoHit: -1, ConfigManager.enemyPoisonDuration.Value, ConfigManager.enemyPoisonDamage.Value);
     }
 
     public void GoTowardsEntrance()
     {
-        if (entrances != null || entrances.Count == 0)
-            entrances = FindObjectsOfType<EntranceTeleport>().ToList();
-
-        EntranceTeleport entranceTeleport = entrances.Where(e => e.isEntranceToBuilding == isOutside)
+        EntranceTeleport entranceTeleport = LFCSpawnRegistry.GetAllAs<EntranceTeleport>()?
+            .Where(e => e.isEntranceToBuilding == isOutside)
             .OrderBy(e => Vector3.Distance(transform.position, e.entrancePoint.position))
             .FirstOrDefault();
+        if (entranceTeleport == null) return;
 
         if (Vector3.Distance(transform.position, entranceTeleport.entrancePoint.position) < 1f)
         {
-            Vector3 exitPosition = entrances.FirstOrDefault(e => e.isEntranceToBuilding != entranceTeleport.isEntranceToBuilding && e.entranceId == entranceTeleport.entranceId)
+            Vector3 exitPosition = LFCSpawnRegistry.GetAllAs<EntranceTeleport>()
+                .FirstOrDefault(e => e.isEntranceToBuilding != entranceTeleport.isEntranceToBuilding && e.entranceId == entranceTeleport.entranceId)
                 .entrancePoint
                 .position;
             _ = StartCoroutine(TeleportEnemyCoroutine(exitPosition, !isOutside));
@@ -304,12 +311,6 @@ public class LanternKeeperAI : EnemyAI
     {
         if (isEnemyDead) return;
 
-        if ((IsServer || IsHost) && !enemyType.canDie)
-        {
-            _ = LKUtilities.SpawnItem(LanternKeeper.fortuneCookieObj, transform.position + (Vector3.up * 0.5f), !isOutside);
-            return;
-        }
-
         base.HitEnemy(force, playerWhoHit, playHitSFX, hitID);
 
         SetEnemyStunned(setToStunned: true, 0.2f, playerWhoHit);
@@ -322,32 +323,10 @@ public class LanternKeeperAI : EnemyAI
         base.KillEnemy();
 
         if (damagePlayerCoroutine != null) StopCoroutine(damagePlayerCoroutine);
-
-        if (IsServer || IsHost)
+        if (LFCUtilities.IsServer)
         {
-            for (int i = 0; i < StartOfRound.Instance.connectedPlayersAmount + 1; i++)
-                SpawnPoisonDagger(LanternKeeper.daggerObj, transform.position + (Vector3.up * 0.5f));
-        }
-    }
-
-    public void SpawnPoisonDagger(GameObject spawnPrefab, Vector3 position)
-    {
-        GameObject gameObject = Instantiate(spawnPrefab, position, Quaternion.identity, StartOfRound.Instance.propsContainer);
-        GrabbableObject grabbableObject = gameObject.GetComponent<GrabbableObject>();
-        grabbableObject.fallTime = 0f;
-        grabbableObject.isInFactory = !isOutside;
-        gameObject.GetComponent<NetworkObject>().Spawn();
-
-        SetScrapValueClientRpc(grabbableObject.GetComponent<NetworkObject>(), new System.Random().Next(ConfigManager.daggerMinValue.Value, ConfigManager.daggerMaxValue.Value));
-    }
-
-    [ClientRpc]
-    public void SetScrapValueClientRpc(NetworkObjectReference obj, int scrapValue)
-    {
-        if (obj.TryGet(out NetworkObject networkObject))
-        {
-            GrabbableObject grabbableObject = networkObject.gameObject.GetComponentInChildren<GrabbableObject>();
-            grabbableObject.SetScrapValue(scrapValue);
+            PoisonDagger poisonDagger = LFCObjectsManager.SpawnObjectForServer(LanternKeeper.daggerObj, transform.position + (Vector3.up * 0.5f)) as PoisonDagger;
+            poisonDagger.InitializeForServer();
         }
     }
 

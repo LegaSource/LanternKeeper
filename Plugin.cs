@@ -17,52 +17,24 @@ namespace LanternKeeper;
 [BepInPlugin(modGUID, modName, modVersion)]
 public class LanternKeeper : BaseUnityPlugin
 {
-    private const string modGUID = "Lega.LanternKeeper";
-    private const string modName = "Lantern Keeper";
-    private const string modVersion = "1.0.4";
+    internal const string modGUID = "Lega.LanternKeeper";
+    internal const string modName = "Lantern Keeper";
+    internal const string modVersion = "1.0.6";
 
     private readonly Harmony harmony = new Harmony(modGUID);
     private static readonly AssetBundle bundle = AssetBundle.LoadFromFile(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "lanternkeeper"));
     internal static ManualLogSource mls;
     public static ConfigFile configFile;
 
-    // Enemies
-    public static EnemyType lanternKeeperEnemy;
+    public static GameObject managerPrefab = NetworkPrefabs.CreateNetworkPrefab("LanternKeeperNetworkManager");
 
     // Items
-    public static GameObject fortuneCookieObj;
     public static GameObject daggerObj;
+    public static GameObject toxicKunaiObj;
 
     // Lanterns
     public static GameObject lanternObj;
     public static List<Lantern> spawnedLanterns = [];
-
-    // Particles
-    public static GameObject poisonParticle;
-
-    // Shaders
-    public static Material wallhackShader;
-
-    // Lights
-    public static GameObject redLight;
-    public static GameObject blueLight;
-    public static GameObject greenLight;
-
-    public static bool teleportOnCooldown = false;
-    public enum ControlTip
-    {
-        RED,
-        BLUE,
-        GREEN
-    }
-
-    public static List<int> shuffledLights =
-    [
-        (int)ControlTip.RED,
-        (int)ControlTip.BLUE,
-        (int)ControlTip.GREEN
-    ];
-    public static int currentLanternToLightIndex;
 
     public void Awake()
     {
@@ -70,15 +42,19 @@ public class LanternKeeper : BaseUnityPlugin
         configFile = Config;
         ConfigManager.Load();
 
+        LoadManager();
         NetcodePatcher();
         LoadItems();
-        LoadLantern();
-        LoadLights();
         LoadEnemies();
-        LoadParticles();
-        LoadShaders();
+        LoadNetworkPrefabs();
 
-        harmony.PatchAll(typeof(RoundManagerPatch));
+        harmony.PatchAll(typeof(StartOfRoundPatch));
+    }
+
+    public static void LoadManager()
+    {
+        Utilities.FixMixerGroups(managerPrefab);
+        _ = managerPrefab.AddComponent<LanternKeeperNetworkManager>();
     }
 
     private static void NetcodePatcher()
@@ -97,10 +73,7 @@ public class LanternKeeper : BaseUnityPlugin
     }
 
     public void LoadItems()
-    {
-        fortuneCookieObj = RegisterItem(typeof(FortuneCookie), bundle.LoadAsset<Item>("Assets/FortuneCookie/FortuneCookieItem.asset")).spawnPrefab;
-        daggerObj = RegisterItem(typeof(PoisonDagger), bundle.LoadAsset<Item>("Assets/PoisonDagger/PoisonDaggerItem.asset")).spawnPrefab;
-    }
+        => daggerObj = RegisterItem(typeof(PoisonDagger), bundle.LoadAsset<Item>("Assets/PoisonDagger/PoisonDaggerItem.asset")).spawnPrefab;
 
     public Item RegisterItem(Type type, Item item)
     {
@@ -119,32 +92,25 @@ public class LanternKeeper : BaseUnityPlugin
         return item;
     }
 
-    public void LoadLantern()
-    {
-        lanternObj = bundle.LoadAsset<GameObject>("Assets/Lantern/LK_Lantern.prefab");
-        NetworkPrefabs.RegisterNetworkPrefab(lanternObj);
-        Utilities.FixMixerGroups(lanternObj);
-    }
-
-    public static void LoadLights()
-    {
-        redLight = bundle.LoadAsset<GameObject>("Assets/Lantern/RedLight.prefab");
-        blueLight = bundle.LoadAsset<GameObject>("Assets/Lantern/BlueLight.prefab");
-        greenLight = bundle.LoadAsset<GameObject>("Assets/Lantern/GreenLight.prefab");
-    }
-
     public static void LoadEnemies()
     {
-        lanternKeeperEnemy = bundle.LoadAsset<EnemyType>("Assets/LanternKeeper/LanternKeeperEnemy.asset");
+        EnemyType lanternKeeperEnemy = bundle.LoadAsset<EnemyType>("Assets/LanternKeeper/LanternKeeperEnemy.asset");
         NetworkPrefabs.RegisterNetworkPrefab(lanternKeeperEnemy.enemyPrefab);
-        Enemies.RegisterEnemy(lanternKeeperEnemy, 0, Levels.LevelTypes.None, bundle.LoadAsset<TerminalNode>("Assets/LanternKeeper/LanternKeeperTN.asset"), bundle.LoadAsset<TerminalKeyword>("Assets/LanternKeeper/LanternKeeperTK.asset"));
+
+        (Dictionary<Levels.LevelTypes, int> spawnRateByLevelType, Dictionary<string, int> spawnRateByCustomLevelType) = ConfigManager.GetEnemySpawns();
+        Enemies.RegisterEnemy(lanternKeeperEnemy,
+            spawnRateByLevelType,
+            spawnRateByCustomLevelType,
+            bundle.LoadAsset<TerminalNode>("Assets/LanternKeeper/LanternKeeperTN.asset"),
+            bundle.LoadAsset<TerminalKeyword>("Assets/LanternKeeper/LanternKeeperTK.asset"));
     }
 
-    public void LoadParticles()
+    public void LoadNetworkPrefabs()
     {
         HashSet<GameObject> gameObjects =
         [
-            (poisonParticle = bundle.LoadAsset<GameObject>("Assets/Particles/PoisonParticle.prefab"))
+            (lanternObj = bundle.LoadAsset<GameObject>("Assets/Lantern/LK_Lantern.prefab")),
+            (toxicKunaiObj = bundle.LoadAsset<GameObject>("Assets/ToxicFang/ToxicKunai.prefab"))
         ];
 
         foreach (GameObject gameObject in gameObjects)
@@ -153,7 +119,4 @@ public class LanternKeeper : BaseUnityPlugin
             Utilities.FixMixerGroups(gameObject);
         }
     }
-
-    public static void LoadShaders()
-        => wallhackShader = bundle.LoadAsset<Material>("Assets/Shaders/WallhackMaterial.mat");
 }

@@ -1,7 +1,7 @@
 ﻿using GameNetcodeStuff;
 using LanternKeeper.Managers;
+using LegaFusionCore.Utilities;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Unity.Netcode;
@@ -21,8 +21,18 @@ public class PoisonDagger : PhysicsProp
     public int daggerMask = 1084754248;
     public float timeAtLastDamageDealt;
 
-    public Coroutine poisonEnemyCoroutine;
-    public ParticleSystem poisonParticle;
+    public void InitializeForServer()
+    {
+        int value = UnityEngine.Random.Range(ConfigManager.daggerMinValue.Value, ConfigManager.daggerMaxValue.Value);
+        InitializeClientRpc(value);
+    }
+
+    [ClientRpc]
+    public void InitializeClientRpc(int value)
+    {
+        SetScrapValue(value);
+        LFCUtilities.SetAddonComponent<ToxicFang>(this, Constants.TOXIC_FANG);
+    }
 
     public override void ItemActivate(bool used, bool buttonDown = true)
     {
@@ -70,7 +80,7 @@ public class PoisonDagger : PhysicsProp
                 }
                 else
                 {
-                    if (!daggerHit.transform.TryGetComponent<IHittable>(out IHittable component) || daggerHit.transform == previousPlayerHeldBy.transform) continue;
+                    if (!daggerHit.transform.TryGetComponent(out IHittable component) || daggerHit.transform == previousPlayerHeldBy.transform) continue;
                     if (!(daggerHit.point == Vector3.zero) && Physics.Linecast(previousPlayerHeldBy.gameplayCamera.transform.position, daggerHit.point, out RaycastHit hitInfo, StartOfRound.Instance.collidersAndRoomMaskAndDefault)) continue;
 
                     hitDetected = true;
@@ -81,8 +91,6 @@ public class PoisonDagger : PhysicsProp
                         {
                             timeAtLastDamageDealt = Time.realtimeSinceStartup;
                             _ = component.Hit(daggerHitForce, previousPlayerHeldBy.gameplayCamera.transform.forward, previousPlayerHeldBy, playHitSFX: true, 5);
-                            if (component is EnemyAICollisionDetect enemyCollision && poisonEnemyCoroutine == null)
-                                PoisonEnemyServerRpc(enemyCollision.mainScript.thisNetworkObject);
                         }
                         hittableObjectHit = true;
                     }
@@ -104,48 +112,6 @@ public class PoisonDagger : PhysicsProp
             }
             HitDaggerServerRpc(footstepSurfaceIndex);
         }
-    }
-
-    [ServerRpc(RequireOwnership = false)]
-    public void PoisonEnemyServerRpc(NetworkObjectReference enemyObject)
-        => PoisonEnemyClientRpc(enemyObject);
-
-    [ClientRpc]
-    public void PoisonEnemyClientRpc(NetworkObjectReference enemyObject)
-    {
-        if (enemyObject.TryGet(out NetworkObject networkObject))
-        {
-            EnemyAI enemy = networkObject.gameObject.GetComponentInChildren<EnemyAI>();
-            if (enemy.isEnemyDead) return;
-
-            StopPoisonParticleEnemy();
-            poisonEnemyCoroutine = StartCoroutine(PoisonEnemyCoroutine(enemy));
-        }
-    }
-
-    public IEnumerator PoisonEnemyCoroutine(EnemyAI enemy)
-    {
-        poisonParticle = LKUtilities.SpawnPoisonParticle(enemy.transform);
-
-        float timePassed = 0f;
-        while (timePassed < ConfigManager.daggerPoisonDuration.Value)
-        {
-            if (Mathf.FloorToInt(timePassed * 10) % 10 == 0) enemy.SetEnemyStunned(setToStunned: true, ConfigManager.daggerPoisonStunDuration.Value, playerHeldBy);
-            timePassed += Time.deltaTime;
-
-            yield return null;
-        }
-        enemy.HitEnemy(ConfigManager.daggerPoisonDamage.Value, playerHeldBy, true, -1);
-
-        Destroy(poisonParticle.gameObject);
-        poisonEnemyCoroutine = null;
-    }
-
-    public void StopPoisonParticleEnemy()
-    {
-        if (poisonEnemyCoroutine != null) StopCoroutine(poisonEnemyCoroutine);
-        if (poisonParticle != null) Destroy(poisonParticle.gameObject);
-        poisonEnemyCoroutine = null;
     }
 
     [ServerRpc(RequireOwnership = false)]
