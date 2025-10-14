@@ -92,7 +92,7 @@ public class LanternKeeperAI : EnemyAI
                 if (isOutside) lantern.transform.localScale *= 2f;
 
                 gameObject.GetComponent<NetworkObject>().Spawn(true);
-                lantern.InitializeLanternClientRpc(thisNetworkObject, isOutside);
+                lantern.InitializeLanternEveryoneRpc(thisNetworkObject, isOutside);
             }
         }
     }
@@ -149,7 +149,7 @@ public class LanternKeeperAI : EnemyAI
                 if (FoundClosestPlayerInRange(25, 10))
                 {
                     StopSearch(currentSearch);
-                    DoAnimationClientRpc("startChase");
+                    DoAnimationEveryoneRpc("startChase");
                     SwitchToBehaviourClientRpc((int)State.CHASING);
                     return;
                 }
@@ -160,7 +160,7 @@ public class LanternKeeperAI : EnemyAI
                 if (!TargetClosestPlayerInAnyCase() || (Vector3.Distance(transform.position, targetPlayer.transform.position) > 20f && !CheckLineOfSightForPosition(targetPlayer.transform.position)))
                 {
                     StartSearch(transform.position);
-                    DoAnimationClientRpc("startMove");
+                    DoAnimationEveryoneRpc("startMove");
                     SwitchToBehaviourClientRpc((int)State.WANDERING);
                     return;
                 }
@@ -173,8 +173,8 @@ public class LanternKeeperAI : EnemyAI
                     if (targetPlayer == null || Vector3.Distance(transform.position, targetPlayer.transform.position) > 5f)
                     {
                         StartSearch(transform.position);
-                        DoAnimationClientRpc("startGetDown");
-                        DoAnimationClientRpc("startChase");
+                        DoAnimationEveryoneRpc("startGetDown");
+                        DoAnimationEveryoneRpc("startChase");
                         SwitchToBehaviourClientRpc((int)State.CHASING);
                         return;
                     }
@@ -234,8 +234,8 @@ public class LanternKeeperAI : EnemyAI
 
     public IEnumerator GetUpCoroutine()
     {
-        DoAnimationServerRpc("startGetUp");
-        DoAnimationServerRpc("startIdle");
+        DoAnimationEveryoneRpc("startGetUp");
+        DoAnimationEveryoneRpc("startIdle");
 
         yield return new WaitForSeconds(0.75f);
 
@@ -245,24 +245,24 @@ public class LanternKeeperAI : EnemyAI
 
     public IEnumerator DamagePlayerCoroutine(PlayerControllerB player)
     {
-        DoAnimationClientRpc("startBite");
-        PlayBiteClientRpc();
+        DoAnimationEveryoneRpc("startBite");
+        PlayBiteEveryoneRpc();
 
         yield return new WaitForSeconds(1f);
 
-        if (CheckLineOfSightForPosition(player.gameplayCamera.transform.position, 70f, 20, 4f)) DamagePlayerClientRpc((int)player.playerClientId);
-        DoAnimationClientRpc("startIdle");
+        if (CheckLineOfSightForPosition(player.gameplayCamera.transform.position, 70f, 20, 4f)) DamagePlayerEveryoneRpc((int)player.playerClientId);
+        DoAnimationEveryoneRpc("startIdle");
 
         yield return new WaitForSeconds(1.5f);
 
         damagePlayerCoroutine = null;
     }
 
-    [ClientRpc]
-    public void PlayBiteClientRpc() => creatureSFX.PlayOneShot(BiteSound);
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void PlayBiteEveryoneRpc() => creatureSFX.PlayOneShot(BiteSound);
 
-    [ClientRpc]
-    public void DamagePlayerClientRpc(int playerId)
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void DamagePlayerEveryoneRpc(int playerId)
     {
         PlayerControllerB player = StartOfRound.Instance.allPlayerObjects[playerId].GetComponent<PlayerControllerB>();
         if (player == GameNetworkManager.Instance.localPlayerController)
@@ -294,11 +294,11 @@ public class LanternKeeperAI : EnemyAI
     public IEnumerator TeleportEnemyCoroutine(Vector3 position, bool isOutside)
     {
         yield return new WaitForSeconds(1f);
-        TeleportEnemyClientRpc(position, isOutside);
+        TeleportEnemyEveryoneRpc(position, isOutside);
     }
 
-    [ClientRpc]
-    public void TeleportEnemyClientRpc(Vector3 teleportPosition, bool isOutside)
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void TeleportEnemyEveryoneRpc(Vector3 teleportPosition, bool isOutside)
     {
         SetEnemyOutside(isOutside);
         serverPosition = teleportPosition;
@@ -330,11 +330,6 @@ public class LanternKeeperAI : EnemyAI
         }
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    public void DoAnimationServerRpc(string animationState)
-        => DoAnimationClientRpc(animationState);
-
-    [ClientRpc]
-    public void DoAnimationClientRpc(string animationState)
-        => creatureAnimator.SetTrigger(animationState);
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void DoAnimationEveryoneRpc(string animationState) => creatureAnimator.SetTrigger(animationState);
 }

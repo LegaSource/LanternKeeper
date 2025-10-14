@@ -24,11 +24,11 @@ public class PoisonDagger : PhysicsProp
     public void InitializeForServer()
     {
         int value = UnityEngine.Random.Range(ConfigManager.daggerMinValue.Value, ConfigManager.daggerMaxValue.Value);
-        InitializeClientRpc(value);
+        InitializeEveryoneRpc(value);
     }
 
-    [ClientRpc]
-    public void InitializeClientRpc(int value)
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void InitializeEveryoneRpc(int value)
     {
         SetScrapValue(value);
         LFCUtilities.SetAddonComponent<ToxicFang>(this, Constants.TOXIC_FANG);
@@ -110,16 +110,12 @@ public class PoisonDagger : PhysicsProp
                 daggerAudio.PlayOneShot(StartOfRound.Instance.footstepSurfaces[footstepSurfaceIndex].hitSurfaceSFX);
                 WalkieTalkie.TransmitOneShotAudio(daggerAudio, StartOfRound.Instance.footstepSurfaces[footstepSurfaceIndex].hitSurfaceSFX);
             }
-            HitDaggerServerRpc(footstepSurfaceIndex);
+            HitDaggerEveryoneRpc(footstepSurfaceIndex);
         }
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    public void HitDaggerServerRpc(int hitSurfaceID)
-        => HitDaggerClientRpc(hitSurfaceID);
-
-    [ClientRpc]
-    public void HitDaggerClientRpc(int hitSurfaceID)
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void HitDaggerEveryoneRpc(int hitSurfaceID)
     {
         if (IsOwner) return;
 

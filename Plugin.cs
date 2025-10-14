@@ -72,8 +72,7 @@ public class LanternKeeper : BaseUnityPlugin
         }
     }
 
-    public void LoadItems()
-        => daggerObj = RegisterItem(typeof(PoisonDagger), bundle.LoadAsset<Item>("Assets/PoisonDagger/PoisonDaggerItem.asset")).spawnPrefab;
+    public void LoadItems() => daggerObj = RegisterItem(typeof(PoisonDagger), bundle.LoadAsset<Item>("Assets/PoisonDagger/PoisonDaggerItem.asset")).spawnPrefab;
 
     public Item RegisterItem(Type type, Item item)
     {

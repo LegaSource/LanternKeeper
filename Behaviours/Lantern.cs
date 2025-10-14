@@ -15,8 +15,8 @@ public class Lantern : NetworkBehaviour
     public GameObject light1;
     public GameObject light2;
 
-    [ClientRpc]
-    public void InitializeLanternClientRpc(NetworkObjectReference enemyObject, bool isOutside)
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void InitializeLanternEveryoneRpc(NetworkObjectReference enemyObject, bool isOutside)
     {
         if (enemyObject.TryGet(out NetworkObject networkObject))
             lanternKeeper = networkObject.gameObject.GetComponentInChildren<EnemyAI>() as LanternKeeperAI;
@@ -32,13 +32,10 @@ public class Lantern : NetworkBehaviour
     }
 
     public void LanternInteraction() => TeleportLanternKeeperServerRpc();
-    public void SwitchOnLantern() => SwitchOnLanternServerRpc((int)GameNetworkManager.Instance.localPlayerController.playerClientId);
+    public void SwitchOnLantern() => SwitchOnLanternEveryoneRpc((int)GameNetworkManager.Instance.localPlayerController.playerClientId);
 
-    [ServerRpc(RequireOwnership = false)]
-    public void SwitchOnLanternServerRpc(int playerId) => SwitchOnLanternClientRpc(playerId);
-
-    [ClientRpc]
-    public void SwitchOnLanternClientRpc(int playerId)
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void SwitchOnLanternEveryoneRpc(int playerId)
     {
         isLightOn = true;
         interactTrigger.enabled = false;
@@ -50,7 +47,7 @@ public class Lantern : NetworkBehaviour
             lanternKeeper.HitEnemyOnLocalClient(20, playerWhoHit: StartOfRound.Instance.allPlayerObjects[playerId].GetComponent<PlayerControllerB>());
     }
 
-    [ServerRpc(RequireOwnership = false)]
+    [Rpc(SendTo.Server, RequireOwnership = false)]
     public void TeleportLanternKeeperServerRpc()
     {
         if (Vector3.Distance(transform.position, lanternKeeper.transform.position) <= 15f) return;

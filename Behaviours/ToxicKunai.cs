@@ -12,8 +12,8 @@ public class ToxicKunai : NetworkBehaviour
     public AudioSource kunaiAudio;
     public AudioClip[] throwSFX;
 
-    [ClientRpc]
-    public void ShootToxicKunaiClientRpc(int playerId)
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void ShootToxicKunaiEveryoneRpc(int playerId)
     {
         throwingPlayer = StartOfRound.Instance.allPlayerObjects[playerId].GetComponent<PlayerControllerB>();
         _ = RoundManager.PlayRandomClip(kunaiAudio, throwSFX);
@@ -47,7 +47,7 @@ public class ToxicKunai : NetworkBehaviour
         EnemyAICollisionDetect enemyCollision = other.GetComponent<EnemyAICollisionDetect>();
         if (enemyCollision == null) return false;
 
-        LanternKeeperNetworkManager.Instance.SpawnToxicFangServerRpc((int)throwingPlayer.playerClientId, enemyCollision.mainScript.NetworkObject);
+        LanternKeeperNetworkManager.Instance.ApplyPoisonEveryoneRpc((int)throwingPlayer.playerClientId, enemyCollision.mainScript.NetworkObject);
         return true;
     }
 
@@ -56,10 +56,10 @@ public class ToxicKunai : NetworkBehaviour
         PlayerControllerB player = other.GetComponent<PlayerControllerB>();
         if (player == null || player == throwingPlayer) return false;
 
-        LanternKeeperNetworkManager.Instance.SpawnToxicFangServerRpc((int)throwingPlayer.playerClientId, (int)player.playerClientId);
+        LanternKeeperNetworkManager.Instance.ApplyPoisonEveryoneRpc((int)throwingPlayer.playerClientId, (int)player.playerClientId);
         return true;
     }
 
-    [ServerRpc(RequireOwnership = false)]
+    [Rpc(SendTo.Server, RequireOwnership = false)]
     public void DestroyToxicKunaiServerRpc() => Destroy(gameObject);
 }

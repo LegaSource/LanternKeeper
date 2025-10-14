@@ -12,7 +12,7 @@ internal class LanternKeeperNetworkManager : NetworkBehaviour
 
     public void Awake() => Instance = this;
 
-    [ServerRpc(RequireOwnership = false)]
+    [Rpc(SendTo.Server, RequireOwnership = false)]
     public void ShootToxicKunaiServerRpc(int playerId)
     {
         PlayerControllerB player = StartOfRound.Instance.allPlayerObjects[playerId].GetComponent<PlayerControllerB>();
@@ -21,14 +21,11 @@ internal class LanternKeeperNetworkManager : NetworkBehaviour
         GameObject gameObject = Instantiate(LanternKeeper.toxicKunaiObj, position, player.gameplayCamera.transform.rotation, StartOfRound.Instance.propsContainer);
         ToxicKunai toxicKunai = gameObject.GetComponent<ToxicKunai>();
         gameObject.GetComponent<NetworkObject>().Spawn();
-        toxicKunai.ShootToxicKunaiClientRpc(playerId);
+        toxicKunai.ShootToxicKunaiEveryoneRpc(playerId);
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    public void SpawnToxicFangServerRpc(int playerId, NetworkObjectReference enemyObj) => ApplyPoisonClientRpc(playerId, enemyObj);
-
-    [ClientRpc]
-    public void ApplyPoisonClientRpc(int playerId, NetworkObjectReference enemyObj)
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void ApplyPoisonEveryoneRpc(int playerId, NetworkObjectReference enemyObj)
     {
         if (!enemyObj.TryGet(out NetworkObject networkObjectEnemy)) return;
 
@@ -36,11 +33,8 @@ internal class LanternKeeperNetworkManager : NetworkBehaviour
         LFCStatusEffectRegistry.ApplyStatus(enemy.gameObject, LFCStatusEffectRegistry.StatusEffectType.POISON, playerId, 10, 100);
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    public void SpawnToxicFangServerRpc(int playerId, int targetId) => ApplyPoisonClientRpc(playerId, targetId);
-
-    [ClientRpc]
-    public void ApplyPoisonClientRpc(int playerId, int targetId)
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void ApplyPoisonEveryoneRpc(int playerId, int targetId)
     {
         PlayerControllerB targetedPlayer = StartOfRound.Instance.allPlayerObjects[targetId].GetComponent<PlayerControllerB>();
         LFCStatusEffectRegistry.ApplyStatus(targetedPlayer.gameObject, LFCStatusEffectRegistry.StatusEffectType.POISON, playerId, 10, 10);
