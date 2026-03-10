@@ -31,7 +31,7 @@ public class PoisonDagger : PhysicsProp
     public void InitializeEveryoneRpc(int value)
     {
         SetScrapValue(value);
-        LFCUtilities.SetAddonComponent<ToxicFang>(this, Constants.TOXIC_FANG);
+        LFCUtilities.SetAddonComponent<ToxicBall>(this, Constants.TOXIC_BALL);
     }
 
     public override void ItemActivate(bool used, bool buttonDown = true)

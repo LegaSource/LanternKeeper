@@ -18,21 +18,21 @@ public class ConfigManager
     public static ConfigEntry<int> daggerMinValue;
     public static ConfigEntry<int> daggerMaxValue;
     // TOXIC FANG
-    public static ConfigEntry<int> toxicFangCooldown;
+    public static ConfigEntry<int> toxicBallCooldown;
 
     public static void Load()
     {
         // GLOBAL
         spawnWeights = LanternKeeper.configFile.Bind(Constants.GLOBAL, "Spawn weights", "Vanilla:20,Modded:20", $"{Constants.LANTERN_KEEPER_ENEMY} spawn weights");
         // LANTERN KEEPER
-        enemyDirectDamage = LanternKeeper.configFile.Bind(Constants.LANTERN_KEEPER_ENEMY, "Direct Damage", 40, $"Direct damage dealt by the {Constants.LANTERN_KEEPER}");
+        enemyDirectDamage = LanternKeeper.configFile.Bind(Constants.LANTERN_KEEPER_ENEMY, "Direct Damage", 30, $"Direct damage dealt by the {Constants.LANTERN_KEEPER}");
         enemyPoisonDamage = LanternKeeper.configFile.Bind(Constants.LANTERN_KEEPER_ENEMY, "Poison Damage", 10, "Total damage dealt by the poison to the player");
         enemyPoisonDuration = LanternKeeper.configFile.Bind(Constants.LANTERN_KEEPER_ENEMY, "Poison Duration", 10, "Poison duration");
         // POISON DAGGER
         daggerMinValue = LanternKeeper.configFile.Bind(Constants.POISON_DAGGER, "Min Value", 50, $"{Constants.POISON_DAGGER} min value");
         daggerMaxValue = LanternKeeper.configFile.Bind(Constants.POISON_DAGGER, "Max Value", 90, $"{Constants.POISON_DAGGER} max value");
         // TOXIC FANG
-        toxicFangCooldown = LanternKeeper.configFile.Bind(Constants.TOXIC_FANG, "Cooldown", 45, $"Cooldown duration of the {Constants.TOXIC_FANG}");
+        toxicBallCooldown = LanternKeeper.configFile.Bind(Constants.TOXIC_BALL, "Cooldown", 45, $"Cooldown duration of the {Constants.TOXIC_BALL}");
     }
 
     public static (Dictionary<Levels.LevelTypes, int> spawnRateByLevelType, Dictionary<string, int> spawnRateByCustomLevelType) GetEnemySpawns()

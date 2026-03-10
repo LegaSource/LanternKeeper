@@ -1,11 +1,10 @@
 ﻿using GameNetcodeStuff;
 using LanternKeeper.Managers;
 using LegaFusionCore.Managers;
+using LegaFusionCore.Managers.NetworkManagers;
 using LegaFusionCore.Registries;
 using LegaFusionCore.Utilities;
 using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -16,85 +15,44 @@ public class LanternKeeperAI : EnemyAI
     public Transform TurnCompass;
     public AudioClip[] CrawlSounds = [];
     public AudioClip BiteSound;
+    public Transform ThrowPoint;
+
     public float crawlTimer = 0f;
+    public float throwTimer = 0f;
+    public float throwCooldown = 5f;
 
+    public bool canThrow = false;
+
+    public Coroutine stunCoroutine;
     public Coroutine getUpCoroutine;
-    public Coroutine damagePlayerCoroutine;
+    public Coroutine getDownCoroutine;
+    public Coroutine throwCoroutine;
+    public Coroutine biteCoroutine;
 
-    public enum State
-    {
-        WANDERING,
-        CHASING,
-        ATTACKING
-    }
+    public enum State { WANDERING, CHASING, THROWING }
 
     public override void Start()
     {
         base.Start();
 
-        if (LFCUtilities.IsServer) SpawnLanterns();
         currentBehaviourStateIndex = (int)State.WANDERING;
-        creatureAnimator.SetTrigger("startMove");
         StartSearch(transform.position);
+        SpawnLanternsForServer();
     }
 
-    public void SpawnLanterns()
+    public void SpawnLanternsForServer()
+        => LFCMapObjectsManager.SpawnScatteredMapObjectsForServer(mapObjectsAmount: 2,
+            minInside: 1,
+            minOutside: 1,
+            spawnAction: SpawnLanternForServer);
+
+    public void SpawnLanternForServer(Vector3 position, bool isOutside)
     {
-        const float minDistance = 50f;
-        List<Vector3> selectedPositions = [];
-        StartOfRound.Instance.allPlayerScripts.Where(p => !p.isPlayerDead).ToList().ForEach(p => selectedPositions.Add(p.transform.position));
-
-        LFCUtilities.Shuffle(RoundManager.Instance.outsideAINodes);
-        LFCUtilities.Shuffle(RoundManager.Instance.insideAINodes);
-
-        for (int i = 0; i < 2; i++)
-        {
-            float maxDistance = float.MinValue;
-            Vector3 bestPosition = Vector3.zero;
-            GameObject lastNodeSaved = null;
-
-            // Déterminer si cette lanterne est à l'extérieur ou à l'intérieur
-            bool isOutside = new System.Random().Next(0, 2) == 1;
-            List<GameObject> nodes = (isOutside ? RoundManager.Instance.outsideAINodes : RoundManager.Instance.insideAINodes).ToList();
-            float radius = isOutside ? 10f : 2f;
-
-            foreach (GameObject node in nodes)
-            {
-                Vector3 candidatePosition = RoundManager.Instance.GetRandomNavMeshPositionInBoxPredictable(node.transform.position, radius, default, new System.Random()) + Vector3.up;
-                if (!Physics.Raycast(candidatePosition, Vector3.down, out UnityEngine.RaycastHit hit, 5f, StartOfRound.Instance.collidersAndRoomMaskAndDefault)) continue;
-
-                Vector3 validPosition = hit.point;
-
-                // Calculer la distance minimale avec les positions sélectionnées
-                float minDistanceToSelected = selectedPositions.Count > 0
-                    ? selectedPositions.Min(p => Vector3.Distance(p, validPosition))
-                    : float.MaxValue;
-
-                // Garder la position la plus éloignée des autres sélectionnées
-                if (minDistanceToSelected > minDistance || minDistanceToSelected > maxDistance)
-                {
-                    maxDistance = minDistanceToSelected;
-                    bestPosition = validPosition;
-                    lastNodeSaved = node;
-
-                    if (minDistanceToSelected > minDistance) break;
-                }
-            }
-
-            if (bestPosition != Vector3.zero)
-            {
-                selectedPositions.Add(bestPosition);
-                _ = nodes.Remove(lastNodeSaved);
-
-                GameObject gameObject = Instantiate(LanternKeeper.lanternObj, bestPosition + (Vector3.down * 0.5f), Quaternion.identity, RoundManager.Instance.mapPropsContainer.transform);
-                Lantern lantern = gameObject.GetComponent<Lantern>();
-
-                if (isOutside) lantern.transform.localScale *= 2f;
-
-                gameObject.GetComponent<NetworkObject>().Spawn(true);
-                lantern.InitializeLanternEveryoneRpc(thisNetworkObject, isOutside);
-            }
-        }
+        GameObject gameObject = Instantiate(LanternKeeper.lanternObj, position + (Vector3.down * 0.5f), Quaternion.identity, RoundManager.Instance.mapPropsContainer.transform);
+        Lantern lantern = gameObject.GetComponent<Lantern>();
+        if (isOutside) lantern.transform.localScale *= 2f;
+        gameObject.GetComponent<NetworkObject>().Spawn(true);
+        lantern.InitializeLanternEveryoneRpc(thisNetworkObject, isOutside);
     }
 
     public override void Update()
@@ -103,37 +61,66 @@ public class LanternKeeperAI : EnemyAI
 
         if (isEnemyDead || StartOfRound.Instance.allPlayersDead) return;
 
-        creatureAnimator.SetBool("stunned", stunNormalizedTimer > 0f);
-        if (stunNormalizedTimer > 0f)
-        {
-            agent.speed = 0f;
-            if (stunnedByPlayer != null)
-            {
-                targetPlayer = stunnedByPlayer;
-                StopSearch(currentSearch);
-                SwitchToBehaviourClientRpc((int)State.CHASING);
-            }
-            return;
-        }
         PlayCrawlSound();
         int state = currentBehaviourStateIndex;
-        if (targetPlayer != null && (state == (int)State.CHASING || state == (int)State.ATTACKING))
+        if (targetPlayer != null && (state == (int)State.CHASING || state == (int)State.THROWING))
         {
             TurnCompass.LookAt(targetPlayer.gameplayCamera.transform.position);
             transform.rotation = Quaternion.Lerp(transform.rotation, Quaternion.Euler(new Vector3(0f, TurnCompass.eulerAngles.y, 0f)), 4f * Time.deltaTime);
         }
+        LFCUtilities.UpdateTimer(ref throwTimer, throwCooldown, !canThrow, () => canThrow = true);
     }
 
     public void PlayCrawlSound()
     {
-        if (currentBehaviourStateIndex == (int)State.ATTACKING) return;
+        if (currentBehaviourStateIndex == (int)State.THROWING) return;
 
         crawlTimer -= Time.deltaTime;
         if (CrawlSounds.Length > 0 && crawlTimer <= 0)
         {
-            creatureSFX.PlayOneShot(CrawlSounds[UnityEngine.Random.Range(0, CrawlSounds.Length)]);
+            creatureSFX.PlayOneShot(CrawlSounds[Random.Range(0, CrawlSounds.Length)]);
             crawlTimer = currentBehaviourStateIndex == (int)State.WANDERING ? 1.3f : 1.1f;
         }
+    }
+
+    public override void SetEnemyStunned(bool setToStunned, float setToStunTime = 1.34f, PlayerControllerB setStunnedByPlayer = null)
+    {
+        if (LFCUtilities.IsServer && setToStunned && stunCoroutine == null)
+        {
+            base.SetEnemyStunned(setToStunned, setToStunTime, setStunnedByPlayer);
+            stunCoroutine = StartCoroutine(StunCoroutine());
+        }
+    }
+
+    public IEnumerator StunCoroutine()
+    {
+        CancelGetUpCoroutine();
+        CancelGetDownCoroutine();
+        CancelThrowCoroutine();
+        CancelBiteCoroutine();
+
+        agent.speed = 0f;
+        DoAnimationEveryoneRpc("startStun");
+        yield return this.WaitForFullAnimation("stun");
+
+        while (stunNormalizedTimer > 0f) yield return null;
+        while (postStunInvincibilityTimer > 0f) yield return null;
+
+        if (currentBehaviourStateIndex == (int)State.THROWING)
+        {
+            DoAnimationEveryoneRpc("startGetDown");
+            yield return this.WaitForFullAnimation("getDown");
+        }
+
+        DoAnimationEveryoneRpc("startMove");
+        if (currentBehaviourStateIndex == (int)State.WANDERING && stunnedByPlayer != null)
+        {
+            targetPlayer = stunnedByPlayer;
+            StopSearch(currentSearch);
+            SwitchToBehaviourClientRpc((int)State.CHASING);
+        }
+
+        stunCoroutine = null;
     }
 
     public override void DoAIInterval()
@@ -144,191 +131,195 @@ public class LanternKeeperAI : EnemyAI
 
         switch (currentBehaviourStateIndex)
         {
-            case (int)State.WANDERING:
-                agent.speed = 3f;
-                if (FoundClosestPlayerInRange(25, 10))
-                {
-                    StopSearch(currentSearch);
-                    DoAnimationEveryoneRpc("startChase");
-                    SwitchToBehaviourClientRpc((int)State.CHASING);
-                    return;
-                }
-                break;
-            case (int)State.CHASING:
-                agent.speed = 6f;
-                if (TargetOutsideChasedPlayer()) return;
-                if (!TargetClosestPlayerInAnyCase() || (Vector3.Distance(transform.position, targetPlayer.transform.position) > 20f && !CheckLineOfSightForPosition(targetPlayer.transform.position)))
-                {
-                    StartSearch(transform.position);
-                    DoAnimationEveryoneRpc("startMove");
-                    SwitchToBehaviourClientRpc((int)State.WANDERING);
-                    return;
-                }
-                SetMovingTowardsTargetPlayer(targetPlayer);
-                break;
-            case (int)State.ATTACKING:
-                agent.speed = 0f;
-                if (damagePlayerCoroutine == null)
-                {
-                    if (targetPlayer == null || Vector3.Distance(transform.position, targetPlayer.transform.position) > 5f)
-                    {
-                        StartSearch(transform.position);
-                        DoAnimationEveryoneRpc("startGetDown");
-                        DoAnimationEveryoneRpc("startChase");
-                        SwitchToBehaviourClientRpc((int)State.CHASING);
-                        return;
-                    }
-                    damagePlayerCoroutine = StartCoroutine(DamagePlayerCoroutine(targetPlayer));
-                }
-                SetMovingTowardsTargetPlayer(targetPlayer);
-                break;
-
-            default:
-                break;
+            case (int)State.WANDERING: DoWandering(); break;
+            case (int)State.CHASING: DoChasing(); break;
+            case (int)State.THROWING: DoThrowing(); break;
         }
     }
 
-    private bool FoundClosestPlayerInRange(int range, int senseRange)
+    public void DoWandering()
     {
-        PlayerControllerB player = CheckLineOfSightForPlayer(60f, range, senseRange);
-        return player != null && PlayerIsTargetable(player) && (bool)(targetPlayer = player);
-    }
-
-    public bool TargetOutsideChasedPlayer()
-    {
-        if (targetPlayer.isInsideFactory == isOutside)
+        agent.speed = 3f;
+        if (this.FoundClosestPlayerInRange(25, 10))
         {
-            GoTowardsEntrance();
-            return true;
+            StopSearch(currentSearch);
+            SwitchToBehaviourClientRpc((int)State.CHASING);
         }
-        return false;
     }
 
-    public bool TargetClosestPlayerInAnyCase()
+    public void DoChasing()
     {
-        mostOptimalDistance = 2000f;
-        targetPlayer = null;
-        for (int i = 0; i < StartOfRound.Instance.connectedPlayersAmount + 1; i++)
+        if (biteCoroutine != null || getUpCoroutine != null || getDownCoroutine != null) return;
+
+        agent.speed = 6f;
+        if (this.TargetOutsideChasedPlayer()) return;
+        if (!this.TargetClosestPlayerInAnyCase(out float distanceWithPlayer) || (distanceWithPlayer > 25f && !CheckLineOfSightForPosition(targetPlayer.transform.position)))
         {
-            tempDist = Vector3.Distance(transform.position, StartOfRound.Instance.allPlayerScripts[i].transform.position);
-            if (tempDist < mostOptimalDistance)
-            {
-                mostOptimalDistance = tempDist;
-                targetPlayer = StartOfRound.Instance.allPlayerScripts[i];
-            }
+            StartSearch(transform.position);
+            SwitchToBehaviourClientRpc((int)State.WANDERING);
+            return;
         }
-        return targetPlayer != null;
+        if (CanThrow() && distanceWithPlayer <= 15f && (distanceWithPlayer <= 2f || CheckLineOfSightForPosition(targetPlayer.transform.position)))
+        {
+            getUpCoroutine = StartCoroutine(GetUpCoroutine());
+            SwitchToBehaviourServerRpc((int)State.THROWING);
+            return;
+        }
+        SetMovingTowardsTargetPlayer(targetPlayer);
+    }
+
+    public IEnumerator GetUpCoroutine()
+    {
+        agent.speed = 0f;
+        DoAnimationEveryoneRpc("startGetUp");
+        yield return this.WaitForFullAnimation("getup");
+
+        DoAnimationEveryoneRpc("startIdle");
+        getUpCoroutine = null;
+    }
+
+    public void CancelGetUpCoroutine()
+    {
+        if (getUpCoroutine != null)
+        {
+            StopCoroutine(getUpCoroutine);
+            getUpCoroutine = null;
+        }
+    }
+
+    public void DoThrowing()
+    {
+        if (throwCoroutine != null || getUpCoroutine != null || getDownCoroutine != null) return;
+
+        agent.speed = 0f;
+        float distanceWithPlayer = Vector3.Distance(transform.position, targetPlayer.transform.position);
+        if (!CanThrow() || distanceWithPlayer > 20f || (distanceWithPlayer > 2f && !CheckLineOfSightForPosition(targetPlayer.transform.position)))
+        {
+            getDownCoroutine = StartCoroutine(GetDownCoroutine());
+            SwitchToBehaviourServerRpc((int)State.CHASING);
+            return;
+        }
+        throwCoroutine = StartCoroutine(ThrowCoroutine());
+    }
+
+    public IEnumerator GetDownCoroutine()
+    {
+        agent.speed = 0f;
+        DoAnimationEveryoneRpc("startGetDown");
+        yield return this.WaitForFullAnimation("getdown");
+
+        DoAnimationEveryoneRpc("startMove");
+        getDownCoroutine = null;
+    }
+
+    public void CancelGetDownCoroutine()
+    {
+        if (getDownCoroutine != null)
+        {
+            StopCoroutine(getDownCoroutine);
+            getDownCoroutine = null;
+        }
+    }
+
+    public IEnumerator ThrowCoroutine()
+    {
+        canThrow = false;
+        DoAnimationEveryoneRpc("startBite");
+        PlayBiteEveryoneRpc();
+
+        GameObject gameObject = Instantiate(LanternKeeper.poisonBallObj, ThrowPoint.transform.position, Quaternion.identity);
+        gameObject.GetComponent<NetworkObject>().Spawn();
+        gameObject.GetComponent<PoisonBall>().ThrowFromPositionEveryoneRpc(entityId: NetworkObjectId,
+            startPosition: ThrowPoint.transform.position,
+            direction: targetPlayer.transform.position + (Vector3.up * 1.5f) - ThrowPoint.transform.position,
+            isOutside: isOutside);
+
+        yield return this.WaitForFullAnimation("bite");
+        DoAnimationEveryoneRpc("startIdle");
+
+        throwCoroutine = null;
+    }
+
+    public void CancelThrowCoroutine()
+    {
+        if (throwCoroutine != null)
+        {
+            StopCoroutine(throwCoroutine);
+            throwCoroutine = null;
+        }
     }
 
     public override void OnCollideWithPlayer(Collider other)
     {
         base.OnCollideWithPlayer(other);
 
-        if (currentBehaviourStateIndex != (int)State.CHASING || getUpCoroutine != null) return;
-
+        if (currentBehaviourStateIndex != (int)State.CHASING) return;
         PlayerControllerB player = MeetsStandardPlayerCollisionConditions(other);
-        if (player == null) return;
+        if (!LFCUtilities.ShouldBeLocalPlayer(player)) return;
 
-        getUpCoroutine = StartCoroutine(GetUpCoroutine());
+        BiteServerRpc((int)player.playerClientId);
     }
 
-    public IEnumerator GetUpCoroutine()
+    [Rpc(SendTo.Server, RequireOwnership = false)]
+    public void BiteServerRpc(int playerId)
     {
-        DoAnimationEveryoneRpc("startGetUp");
-        DoAnimationEveryoneRpc("startIdle");
-
-        yield return new WaitForSeconds(0.75f);
-
-        SwitchToBehaviourServerRpc((int)State.ATTACKING);
-        getUpCoroutine = null;
+        if (currentBehaviourStateIndex == (int)State.CHASING && biteCoroutine == null && getUpCoroutine == null && getDownCoroutine == null)
+            biteCoroutine = StartCoroutine(BiteCoroutine(StartOfRound.Instance.allPlayerObjects[playerId].GetComponent<PlayerControllerB>()));
     }
 
-    public IEnumerator DamagePlayerCoroutine(PlayerControllerB player)
+    public IEnumerator BiteCoroutine(PlayerControllerB player)
     {
+        yield return GetUpCoroutine();
         DoAnimationEveryoneRpc("startBite");
         PlayBiteEveryoneRpc();
 
-        yield return new WaitForSeconds(1f);
+        yield return this.WaitForFullAnimation("bite");
+        LFCNetworkManager.Instance.DamagePlayerEveryoneRpc((int)player.playerClientId, ConfigManager.enemyDirectDamage.Value, hasDamageSFX: true, callRPC: true, (int)CauseOfDeath.Mauling);
 
-        if (CheckLineOfSightForPosition(player.gameplayCamera.transform.position, 70f, 20, 4f)) DamagePlayerEveryoneRpc((int)player.playerClientId);
         DoAnimationEveryoneRpc("startIdle");
+        yield return GetDownCoroutine();
 
-        yield return new WaitForSeconds(1.5f);
-
-        damagePlayerCoroutine = null;
+        biteCoroutine = null;
     }
 
-    [Rpc(SendTo.Everyone, RequireOwnership = false)]
-    public void PlayBiteEveryoneRpc() => creatureSFX.PlayOneShot(BiteSound);
-
-    [Rpc(SendTo.Everyone, RequireOwnership = false)]
-    public void DamagePlayerEveryoneRpc(int playerId)
+    public void CancelBiteCoroutine()
     {
-        PlayerControllerB player = StartOfRound.Instance.allPlayerObjects[playerId].GetComponent<PlayerControllerB>();
-        if (player == GameNetworkManager.Instance.localPlayerController)
-            player.DamagePlayer(ConfigManager.enemyDirectDamage.Value, hasDamageSFX: true, callRPC: true, CauseOfDeath.Mauling);
-        LFCStatusEffectRegistry.ApplyStatus(player.gameObject, LFCStatusEffectRegistry.StatusEffectType.POISON, playerWhoHit: -1, ConfigManager.enemyPoisonDuration.Value, ConfigManager.enemyPoisonDamage.Value);
-    }
-
-    public void GoTowardsEntrance()
-    {
-        EntranceTeleport entranceTeleport = LFCSpawnRegistry.GetAllAs<EntranceTeleport>()?
-            .Where(e => e.isEntranceToBuilding == isOutside)
-            .OrderBy(e => Vector3.Distance(transform.position, e.entrancePoint.position))
-            .FirstOrDefault();
-        if (entranceTeleport == null) return;
-
-        if (Vector3.Distance(transform.position, entranceTeleport.entrancePoint.position) < 1f)
+        if (biteCoroutine != null)
         {
-            Vector3 exitPosition = LFCSpawnRegistry.GetAllAs<EntranceTeleport>()
-                .FirstOrDefault(e => e.isEntranceToBuilding != entranceTeleport.isEntranceToBuilding && e.entranceId == entranceTeleport.entranceId)
-                .entrancePoint
-                .position;
-            _ = StartCoroutine(TeleportEnemyCoroutine(exitPosition, !isOutside));
-            return;
+            StopCoroutine(biteCoroutine);
+            biteCoroutine = null;
         }
-
-        _ = SetDestinationToPosition(entranceTeleport.entrancePoint.position);
-    }
-
-    public IEnumerator TeleportEnemyCoroutine(Vector3 position, bool isOutside)
-    {
-        yield return new WaitForSeconds(1f);
-        TeleportEnemyEveryoneRpc(position, isOutside);
-    }
-
-    [Rpc(SendTo.Everyone, RequireOwnership = false)]
-    public void TeleportEnemyEveryoneRpc(Vector3 teleportPosition, bool isOutside)
-    {
-        SetEnemyOutside(isOutside);
-        serverPosition = teleportPosition;
-        transform.position = teleportPosition;
-        _ = agent.Warp(teleportPosition);
-        SyncPositionToClients();
     }
 
     public override void HitEnemy(int force = 1, PlayerControllerB playerWhoHit = null, bool playHitSFX = false, int hitID = -1)
     {
-        if (isEnemyDead) return;
-
-        base.HitEnemy(force, playerWhoHit, playHitSFX, hitID);
-
-        SetEnemyStunned(setToStunned: true, 0.2f, playerWhoHit);
-        enemyHP -= force;
-        if (enemyHP <= 0 && IsOwner) KillEnemyOnOwnerClient();
+        if (!isEnemyDead)
+        {
+            base.HitEnemy(force, playerWhoHit, playHitSFX, hitID);
+            enemyHP -= force;
+            if (enemyHP <= 0 && IsOwner) KillEnemyOnOwnerClient();
+        }
     }
 
     public override void KillEnemy(bool destroy = false)
     {
         base.KillEnemy();
 
-        if (damagePlayerCoroutine != null) StopCoroutine(damagePlayerCoroutine);
         if (LFCUtilities.IsServer)
         {
+            CancelGetUpCoroutine();
+            CancelThrowCoroutine();
+            CancelBiteCoroutine();
+
             PoisonDagger poisonDagger = LFCObjectsManager.SpawnObjectForServer(LanternKeeper.daggerObj, transform.position + (Vector3.up * 0.5f)) as PoisonDagger;
             poisonDagger.InitializeForServer();
         }
     }
+
+    public bool CanThrow() => canThrow && targetPlayer != null && !LFCStatusEffectRegistry.HasStatus(targetPlayer.gameObject, LFCStatusEffectRegistry.StatusEffectType.POISON);
+
+    [Rpc(SendTo.Everyone, RequireOwnership = false)]
+    public void PlayBiteEveryoneRpc() => creatureSFX.PlayOneShot(BiteSound);
 
     [Rpc(SendTo.Everyone, RequireOwnership = false)]
     public void DoAnimationEveryoneRpc(string animationState) => creatureAnimator.SetTrigger(animationState);

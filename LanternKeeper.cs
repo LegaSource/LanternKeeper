@@ -19,7 +19,7 @@ public class LanternKeeper : BaseUnityPlugin
 {
     internal const string modGUID = "Lega.LanternKeeper";
     internal const string modName = "Lantern Keeper";
-    internal const string modVersion = "1.0.6";
+    internal const string modVersion = "1.0.8";
 
     private readonly Harmony harmony = new Harmony(modGUID);
     private static readonly AssetBundle bundle = AssetBundle.LoadFromFile(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "lanternkeeper"));
@@ -28,11 +28,8 @@ public class LanternKeeper : BaseUnityPlugin
 
     public static GameObject managerPrefab = NetworkPrefabs.CreateNetworkPrefab("LanternKeeperNetworkManager");
 
-    // Items
     public static GameObject daggerObj;
-    public static GameObject toxicKunaiObj;
-
-    // Lanterns
+    public static GameObject poisonBallObj;
     public static GameObject lanternObj;
     public static List<Lantern> spawnedLanterns = [];
 
@@ -109,7 +106,7 @@ public class LanternKeeper : BaseUnityPlugin
         HashSet<GameObject> gameObjects =
         [
             (lanternObj = bundle.LoadAsset<GameObject>("Assets/Lantern/LK_Lantern.prefab")),
-            (toxicKunaiObj = bundle.LoadAsset<GameObject>("Assets/ToxicFang/ToxicKunai.prefab"))
+            (poisonBallObj = bundle.LoadAsset<GameObject>("Assets/PoisonBall/PoisonBall.prefab"))
         ];
 
         foreach (GameObject gameObject in gameObjects)

@@ -1,4 +1,5 @@
 ﻿using GameNetcodeStuff;
+using LegaFusionCore.Managers.NetworkManagers;
 using LegaFusionCore.Utilities;
 using Unity.Netcode;
 using UnityEngine;
@@ -20,7 +21,6 @@ public class Lantern : NetworkBehaviour
     {
         if (enemyObject.TryGet(out NetworkObject networkObject))
             lanternKeeper = networkObject.gameObject.GetComponentInChildren<EnemyAI>() as LanternKeeperAI;
-
         LanternKeeper.spawnedLanterns.Add(this);
 
         if (isOutside)
@@ -50,10 +50,11 @@ public class Lantern : NetworkBehaviour
     [Rpc(SendTo.Server, RequireOwnership = false)]
     public void TeleportLanternKeeperServerRpc()
     {
-        if (Vector3.Distance(transform.position, lanternKeeper.transform.position) <= 15f) return;
-
-        Vector3 position = RoundManager.Instance.GetRandomNavMeshPositionInRadiusSpherical(transform.position);
-        _ = lanternKeeper.StartCoroutine(lanternKeeper.TeleportEnemyCoroutine(position, isOutside));
-        _ = lanternKeeper.SetDestinationToPosition(transform.position);
+        if (Vector3.Distance(transform.position, lanternKeeper.transform.position) > 15f)
+        {
+            Vector3 position = RoundManager.Instance.GetRandomNavMeshPositionInRadiusSpherical(transform.position);
+            LFCNetworkManager.Instance.TeleportEnemyEveryoneRpc(lanternKeeper.thisNetworkObject, position, isOutside);
+            _ = lanternKeeper.SetDestinationToPosition(transform.position);
+        }
     }
 }
