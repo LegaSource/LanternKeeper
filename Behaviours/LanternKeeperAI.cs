@@ -2,8 +2,8 @@
 using LanternKeeper.Managers;
 using LegaFusionCore.Managers;
 using LegaFusionCore.Managers.NetworkManagers;
-using LegaFusionCore.Registries;
 using LegaFusionCore.Utilities;
+using LethalStatus.StatusEffects;
 using System.Collections;
 using Unity.Netcode;
 using UnityEngine;
@@ -316,7 +316,7 @@ public class LanternKeeperAI : EnemyAI
         }
     }
 
-    public bool CanThrow() => canThrow && targetPlayer != null && !LFCStatusEffectRegistry.HasStatus(targetPlayer.gameObject, LFCStatusEffectRegistry.StatusEffectType.POISON);
+    public bool CanThrow() => canThrow && targetPlayer != null && !LSStatusEffectRegistry.HasStatus(targetPlayer.gameObject, LSStatusEffectRegistry.StatusEffectType.POISON);
 
     [Rpc(SendTo.Everyone, RequireOwnership = false)]
     public void PlayBiteEveryoneRpc() => creatureSFX.PlayOneShot(BiteSound);

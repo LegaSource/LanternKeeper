@@ -1,8 +1,8 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
-	<RootNamespace>LanternKeeper</RootNamespace>
-    <AssemblyName>LanternKeeper</AssemblyName>
+	<RootNamespace>LanternKeeperAddon</RootNamespace>
+    <AssemblyName>LanternKeeperAddon</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
@@ -44,6 +44,12 @@
 	</Reference>
 	<Reference Include="LethalStatus">
 	  <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Lethal Company\BepInEx\plugins\LethalStatus.dll</HintPath>
+	</Reference>
+	<Reference Include="AddonFusion">
+	  <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Lethal Company\BepInEx\plugins\AddonFusion.dll</HintPath>
+	</Reference>
+	<Reference Include="LanternKeeper">
+	  <HintPath>..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Lethal Company\BepInEx\plugins\LanternKeeper.dll</HintPath>
 	</Reference>
   </ItemGroup>
   <Target Name="NetcodePatch" AfterTargets="PostBuildEvent">

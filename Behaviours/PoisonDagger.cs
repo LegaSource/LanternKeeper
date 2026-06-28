@@ -1,6 +1,5 @@
 ﻿using GameNetcodeStuff;
 using LanternKeeper.Managers;
-using LegaFusionCore.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -21,18 +20,10 @@ public class PoisonDagger : PhysicsProp
     public int daggerMask = 1084754248;
     public float timeAtLastDamageDealt;
 
-    public void InitializeForServer()
-    {
-        int value = UnityEngine.Random.Range(ConfigManager.daggerMinValue.Value, ConfigManager.daggerMaxValue.Value);
-        InitializeEveryoneRpc(value);
-    }
+    public void InitializeForServer() => InitializeEveryoneRpc(UnityEngine.Random.Range(ConfigManager.daggerMinValue.Value, ConfigManager.daggerMaxValue.Value));
 
     [Rpc(SendTo.Everyone, RequireOwnership = false)]
-    public void InitializeEveryoneRpc(int value)
-    {
-        SetScrapValue(value);
-        LFCUtilities.SetAddonComponent<ToxicBall>(this, Constants.TOXIC_BALL);
-    }
+    public void InitializeEveryoneRpc(int value) => SetScrapValue(value);//LFCUtilities.SetAddonComponent<ToxicBall>(this, Constants.TOXIC_BALL);
 
     public override void ItemActivate(bool used, bool buttonDown = true)
     {
@@ -68,6 +59,8 @@ public class PoisonDagger : PhysicsProp
             {
                 if (daggerHit.transform.gameObject.layer == 8 || daggerHit.transform.gameObject.layer == 11)
                 {
+                    if (daggerHit.collider.isTrigger) continue;
+
                     hitDetected = true;
                     for (int i = 0; i < StartOfRound.Instance.footstepSurfaces.Length; i++)
                     {
@@ -81,7 +74,7 @@ public class PoisonDagger : PhysicsProp
                 else
                 {
                     if (!daggerHit.transform.TryGetComponent(out IHittable component) || daggerHit.transform == previousPlayerHeldBy.transform) continue;
-                    if (!(daggerHit.point == Vector3.zero) && Physics.Linecast(previousPlayerHeldBy.gameplayCamera.transform.position, daggerHit.point, out RaycastHit hitInfo, StartOfRound.Instance.collidersAndRoomMaskAndDefault)) continue;
+                    if (!(daggerHit.point == Vector3.zero) && Physics.Linecast(previousPlayerHeldBy.gameplayCamera.transform.position, daggerHit.point, out RaycastHit _, StartOfRound.Instance.collidersAndRoomMaskAndDefault, QueryTriggerInteraction.Ignore)) continue;
 
                     hitDetected = true;
 

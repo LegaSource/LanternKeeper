@@ -5,6 +5,7 @@ using HarmonyLib;
 using LanternKeeper.Behaviours;
 using LanternKeeper.Managers;
 using LanternKeeper.Patches;
+using LegaFusionCore.Managers;
 using LethalLib.Modules;
 using System;
 using System.Collections.Generic;
@@ -19,7 +20,7 @@ public class LanternKeeper : BaseUnityPlugin
 {
     internal const string modGUID = "Lega.LanternKeeper";
     internal const string modName = "Lantern Keeper";
-    internal const string modVersion = "1.0.8";
+    internal const string modVersion = "1.0.9";
 
     private readonly Harmony harmony = new Harmony(modGUID);
     private static readonly AssetBundle bundle = AssetBundle.LoadFromFile(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "lanternkeeper"));
@@ -29,6 +30,7 @@ public class LanternKeeper : BaseUnityPlugin
     public static GameObject managerPrefab = NetworkPrefabs.CreateNetworkPrefab("LanternKeeperNetworkManager");
 
     public static GameObject daggerObj;
+    public static GameObject poisonMarkObj;
     public static GameObject poisonBallObj;
     public static GameObject lanternObj;
     public static List<Lantern> spawnedLanterns = [];
@@ -69,24 +71,7 @@ public class LanternKeeper : BaseUnityPlugin
         }
     }
 
-    public void LoadItems() => daggerObj = RegisterItem(typeof(PoisonDagger), bundle.LoadAsset<Item>("Assets/PoisonDagger/PoisonDaggerItem.asset")).spawnPrefab;
-
-    public Item RegisterItem(Type type, Item item)
-    {
-        if (item.spawnPrefab.GetComponent<PhysicsProp>() == null)
-        {
-            PhysicsProp script = item.spawnPrefab.AddComponent(type) as PhysicsProp;
-            script.grabbable = true;
-            script.grabbableToEnemies = true;
-            script.itemProperties = item;
-        }
-
-        NetworkPrefabs.RegisterNetworkPrefab(item.spawnPrefab);
-        Utilities.FixMixerGroups(item.spawnPrefab);
-        Items.RegisterItem(item);
-
-        return item;
-    }
+    public void LoadItems() => daggerObj = LFCObjectsManager.RegisterObject(typeof(PoisonDagger), bundle.LoadAsset<Item>("Assets/PoisonDagger/PoisonDaggerItem.asset")).spawnPrefab;
 
     public static void LoadEnemies()
     {
@@ -106,7 +91,8 @@ public class LanternKeeper : BaseUnityPlugin
         HashSet<GameObject> gameObjects =
         [
             (lanternObj = bundle.LoadAsset<GameObject>("Assets/Lantern/LK_Lantern.prefab")),
-            (poisonBallObj = bundle.LoadAsset<GameObject>("Assets/PoisonBall/PoisonBall.prefab"))
+            (poisonBallObj = bundle.LoadAsset<GameObject>("Assets/PoisonBall/PoisonBall.prefab")),
+            (poisonMarkObj = bundle.LoadAsset<GameObject>("Assets/Addons/PoisonMark.prefab"))
         ];
 
         foreach (GameObject gameObject in gameObjects)

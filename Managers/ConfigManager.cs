@@ -17,8 +17,8 @@ public class ConfigManager
     // POISON DAGGER
     public static ConfigEntry<int> daggerMinValue;
     public static ConfigEntry<int> daggerMaxValue;
-    // TOXIC FANG
-    public static ConfigEntry<int> toxicBallCooldown;
+    // POISON MARK
+    public static ConfigEntry<int> poisonMarkCooldown;
 
     public static void Load()
     {
@@ -32,7 +32,7 @@ public class ConfigManager
         daggerMinValue = LanternKeeper.configFile.Bind(Constants.POISON_DAGGER, "Min Value", 50, $"{Constants.POISON_DAGGER} min value");
         daggerMaxValue = LanternKeeper.configFile.Bind(Constants.POISON_DAGGER, "Max Value", 90, $"{Constants.POISON_DAGGER} max value");
         // TOXIC FANG
-        toxicBallCooldown = LanternKeeper.configFile.Bind(Constants.TOXIC_BALL, "Cooldown", 45, $"Cooldown duration of the {Constants.TOXIC_BALL}");
+        poisonMarkCooldown = LanternKeeper.configFile.Bind(Constants.POISON_MARK, "Cooldown", 45, $"Cooldown duration of the {Constants.POISON_MARK}");
     }
 
     public static (Dictionary<Levels.LevelTypes, int> spawnRateByLevelType, Dictionary<string, int> spawnRateByCustomLevelType) GetEnemySpawns()

@@ -8,7 +8,7 @@ public class Constants
     public const string LANTERN_KEEPER_ENEMY = "Lantern Keeper (Enemy)";
     // Items
     public const string POISON_DAGGER = "Poison Dagger";
-    public const string TOXIC_BALL = "Toxic Ball";
+    public const string POISON_MARK = "Poison Mark";
     // Enemies
     public const string LANTERN_KEEPER = "Lantern Keeper";
 }
